@@ -1,0 +1,288 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover, maximum-scale=1.0, user-scalable=no">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="theme-color" content="#11131a">
+<title>Untangle</title>
+<style>
+  :root{
+    --bg:#11131a;
+    --panel:#181b25;
+    --ink:#eef0f5;
+    --muted:#7b8194;
+    --line:#2a2f3d;
+    --go:#4ec9a8;       /* movable / success */
+    --stuck:#e8615f;    /* blocked */
+    --accent:#f2b35e;   /* highlight */
+    --cell:54px;
+  }
+  *{box-sizing:border-box;-webkit-tap-highlight-color:transparent}
+  html,body{margin:0;height:100%}
+  body{
+    background:var(--bg);
+    color:var(--ink);
+    font-family:ui-rounded,"SF Pro Rounded",-apple-system,system-ui,sans-serif;
+    display:flex;flex-direction:column;align-items:center;
+    min-height:100dvh;
+    padding:env(safe-area-inset-top) 16px env(safe-area-inset-bottom);
+    overflow:hidden;
+    user-select:none;-webkit-user-select:none;
+  }
+  header{
+    width:100%;max-width:520px;
+    display:flex;align-items:center;justify-content:space-between;
+    padding:18px 4px 6px;
+  }
+  .brand{display:flex;align-items:baseline;gap:9px}
+  .brand b{font-size:21px;letter-spacing:-.5px;font-weight:800}
+  .brand span{font-size:12px;color:var(--muted);letter-spacing:2px;text-transform:uppercase}
+  .lvl{font-size:13px;color:var(--muted);font-variant-numeric:tabular-nums}
+  .lvl b{color:var(--accent);font-weight:800}
+
+  .stage{
+    flex:1;width:100%;max-width:520px;
+    display:flex;flex-direction:column;align-items:center;justify-content:center;
+    gap:24px;
+  }
+  .hint{font-size:14px;color:var(--muted);text-align:center;min-height:20px;transition:.2s}
+  .hint.warn{color:var(--stuck)}
+
+  .board-wrap{position:relative}
+  .board{
+    position:relative;
+    background:var(--panel);
+    border:1px solid var(--line);
+    border-radius:22px;
+    padding:14px;
+    box-shadow:0 24px 60px -24px rgba(0,0,0,.7);
+  }
+  .grid{position:relative}
+  .cell{
+    position:absolute;width:var(--cell);height:var(--cell);
+    display:flex;align-items:center;justify-content:center;
+    border-radius:13px;
+    transition:transform .26s cubic-bezier(.5,0,.1,1),opacity .26s ease,background .15s;
+    cursor:pointer;
+  }
+  .cell svg{width:60%;height:60%;display:block;overflow:visible}
+  .cell path{stroke-linecap:round;stroke-linejoin:round;fill:none;stroke-width:5.5;
+    stroke:var(--ink);transition:stroke .15s}
+  .cell .head{fill:var(--ink);stroke:none;transition:fill .15s}
+  .cell:active{transform:scale(.9)}
+  .cell.shake{animation:shake .32s}
+  .cell.shake path{stroke:var(--stuck)}
+  .cell.shake .head{fill:var(--stuck)}
+  @keyframes shake{
+    0%,100%{transform:translateX(0)}
+    20%{transform:translateX(-5px)}40%{transform:translateX(5px)}
+    60%{transform:translateX(-3px)}80%{transform:translateX(3px)}
+  }
+  .cell.fly{opacity:0;pointer-events:none}
+
+  .controls{display:flex;gap:10px}
+  button{
+    font-family:inherit;font-size:15px;font-weight:700;
+    color:var(--ink);background:var(--panel);
+    border:1px solid var(--line);border-radius:14px;
+    padding:13px 22px;cursor:pointer;transition:.15s;
+  }
+  button:active{transform:translateY(1px)}
+  button.primary{background:var(--go);border-color:var(--go);color:#06241c}
+  button.ghost{background:transparent}
+
+  /* win overlay */
+  .veil{
+    position:fixed;inset:0;background:rgba(10,11,16,.82);
+    backdrop-filter:blur(8px);-webkit-backdrop-filter:blur(8px);
+    display:flex;align-items:center;justify-content:center;
+    opacity:0;pointer-events:none;transition:.28s;z-index:10;
+  }
+  .veil.show{opacity:1;pointer-events:auto}
+  .card{
+    background:var(--panel);border:1px solid var(--line);
+    border-radius:24px;padding:34px 30px;text-align:center;
+    width:min(86vw,340px);transform:translateY(14px) scale(.98);transition:.28s;
+  }
+  .veil.show .card{transform:none}
+  .card .mark{font-size:46px;margin-bottom:8px}
+  .card h2{margin:0 0 4px;font-size:24px;letter-spacing:-.5px}
+  .card p{margin:0 0 22px;color:var(--muted);font-size:14px}
+  .footnote{margin-top:14px;font-size:11px;color:var(--muted);letter-spacing:.3px;text-align:center;padding-bottom:6px}
+</style>
+</head>
+<body>
+  <header>
+    <div class="brand"><b>Untangle</b><span>arrows</span></div>
+    <div class="lvl">Level <b id="lvlNum">1</b></div>
+  </header>
+
+  <div class="stage">
+    <div class="hint" id="hint">Tap an arrow to send it off the board.</div>
+    <div class="board-wrap">
+      <div class="board"><div class="grid" id="grid"></div></div>
+    </div>
+    <div class="controls">
+      <button class="ghost" id="newBtn">New</button>
+      <button class="primary" id="nextBtn" style="display:none">Next level</button>
+    </div>
+  </div>
+
+  <div class="footnote">No ads. No tracking. Add to Home Screen to play like an app.</div>
+
+  <div class="veil" id="veil">
+    <div class="card">
+      <div class="mark">✓</div>
+      <h2>Board cleared</h2>
+      <p id="winSub">Level 1 solved</p>
+      <button class="primary" id="contBtn" style="width:100%">Continue</button>
+    </div>
+  </div>
+
+<script>
+const DIRS = {U:[0,-1],D:[0,1],L:[-1,0],R:[1,0]};
+const CELL = 54, GAP = 8;
+
+// arrow svg per direction (drawn pointing up, rotated)
+const ROT = {U:0,R:90,D:180,L:270};
+function arrowSVG(dir){
+  const r = ROT[dir];
+  return `<svg viewBox="0 0 40 40" style="transform:rotate(${r}deg)">
+    <path d="M20 34 L20 9"/>
+    <path class="head" d="M20 4 L30 17 L10 17 Z"/>
+  </svg>`;
+}
+
+let state = {level:1, cols:5, rows:6, cells:[]};
+
+function rngLevel(){
+  // difficulty scales with level
+  const L = state.level;
+  state.cols = Math.min(4 + Math.floor(L/4), 7);
+  state.rows = Math.min(5 + Math.floor(L/3), 9);
+  const count = Math.min(4 + Math.floor(L*1.2), state.cols*state.rows - 2);
+  generateSolvable(count);
+}
+
+// Generate a guaranteed-solvable board by building it BACKWARDS:
+// start empty, repeatedly place an arrow on an empty cell pointing toward
+// an edge along a currently-clear path. Because each placed arrow could exit
+// at placement time, reversing the placement order yields a valid solve order.
+function generateSolvable(target){
+  const {cols,rows} = state;
+  const occ = Array.from({length:rows},()=>Array(cols).fill(null));
+  const placed = [];
+  let tries = 0;
+  while(placed.length < target && tries < target*60){
+    tries++;
+    const x = Math.floor(Math.random()*cols);
+    const y = Math.floor(Math.random()*rows);
+    if(occ[y][x]) continue;
+    // pick a direction whose path to the edge is currently empty
+    const order = shuffle(['U','D','L','R']);
+    let chosen=null;
+    for(const d of order){
+      const [dx,dy]=DIRS[d];
+      let cx=x+dx, cy=y+dy, clear=true;
+      while(cx>=0&&cx<cols&&cy>=0&&cy<rows){
+        if(occ[cy][cx]){clear=false;break;}
+        cx+=dx; cy+=dy;
+      }
+      if(clear){chosen=d;break;}
+    }
+    if(!chosen) continue;
+    occ[y][x] = {x,y,dir:chosen};
+    placed.push(occ[y][x]);
+  }
+  // ids assigned; solve order is reverse(placed) but player can find any valid order
+  state.cells = placed.map((c,i)=>({...c,id:i,gone:false}));
+}
+
+function shuffle(a){for(let i=a.length-1;i>0;i--){const j=Math.floor(Math.random()*(i+1));[a[i],a[j]]=[a[j],a[i]];}return a;}
+
+function pathClear(cell){
+  const [dx,dy]=DIRS[cell.dir];
+  let cx=cell.x+dx, cy=cell.y+dy;
+  while(cx>=0&&cx<state.cols&&cy>=0&&cy<state.rows){
+    if(state.cells.some(c=>!c.gone && c.x===cx && c.y===cy)) return false;
+    cx+=dx; cy+=dy;
+  }
+  return true;
+}
+
+const grid = document.getElementById('grid');
+const hint = document.getElementById('hint');
+const veil = document.getElementById('veil');
+
+function render(){
+  document.getElementById('lvlNum').textContent = state.level;
+  const w = state.cols*CELL + (state.cols-1)*GAP;
+  const h = state.rows*CELL + (state.rows-1)*GAP;
+  grid.style.width = w+'px';
+  grid.style.height = h+'px';
+  grid.innerHTML='';
+  for(const c of state.cells){
+    if(c.gone) continue;
+    const el = document.createElement('div');
+    el.className='cell';
+    el.style.left = c.x*(CELL+GAP)+'px';
+    el.style.top  = c.y*(CELL+GAP)+'px';
+    el.innerHTML = arrowSVG(c.dir);
+    el.dataset.id = c.id;
+    el.addEventListener('click',()=>tap(c,el));
+    grid.appendChild(el);
+  }
+}
+
+let busy=false;
+function tap(c,el){
+  if(busy || c.gone) return;
+  if(pathClear(c)){
+    busy=true;
+    c.gone=true;
+    const [dx,dy]=DIRS[c.dir];
+    // fly distance: off the board
+    const dist = (Math.max(state.cols,state.rows)+1)*(CELL+GAP);
+    el.classList.add('fly');
+    el.style.transform = `translate(${dx*dist}px,${dy*dist}px)`;
+    setTimeout(()=>{el.remove(); busy=false; checkWin();},260);
+    setHint('');
+  } else {
+    el.classList.add('shake');
+    setHint('Blocked — another arrow is in the way.',true);
+    setTimeout(()=>el.classList.remove('shake'),340);
+  }
+}
+
+let hintTimer;
+function setHint(t,warn){
+  clearTimeout(hintTimer);
+  hint.textContent = t || 'Tap an arrow to send it off the board.';
+  hint.classList.toggle('warn',!!warn);
+  if(warn) hintTimer=setTimeout(()=>setHint(''),1400);
+}
+
+function checkWin(){
+  if(state.cells.every(c=>c.gone)){
+    document.getElementById('winSub').textContent = `Level ${state.level} solved`;
+    veil.classList.add('show');
+  }
+}
+
+function newBoard(){
+  veil.classList.remove('show');
+  rngLevel();
+  render();
+  setHint('');
+}
+
+document.getElementById('newBtn').onclick = newBoard;
+document.getElementById('contBtn').onclick = ()=>{ state.level++; newBoard(); };
+
+// init
+rngLevel(); render();
+</script>
+</body>
+</html>
